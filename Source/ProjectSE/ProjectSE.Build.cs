@@ -20,7 +20,8 @@ public class ProjectSE : ModuleRules
 			"GameplayStateTreeModule",
 			"Niagara",
 			"UMG",
-			"Slate"
+			"Slate",
+			"GameplayMessageRuntime", // GMS
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
