@@ -22,6 +22,9 @@ public class ProjectSE : ModuleRules
 			"UMG",
 			"Slate",
 			"GameplayMessageRuntime", // GMS
+			"GameplayTags", // FGameplayTag
+			"GameplayAbilities", // GAS - Ability System
+			"GameplayTasks", // GAS - Task 시스템
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
