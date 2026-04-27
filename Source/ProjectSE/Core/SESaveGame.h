@@ -6,7 +6,7 @@
 #include "SESaveGame.generated.h"
 
 /**
- * 
+ * 디스크에 직렬화되는 세이브 데이터 클래스
  */
 UCLASS()
 class PROJECTSE_API USESaveGame : public USaveGame
