@@ -31,6 +31,7 @@ public class ProjectSE : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"ProjectSE",
+			"ProjectSE/Character",
 			"ProjectSE/Variant_Strategy",
 			"ProjectSE/Variant_Strategy/UI",
 			"ProjectSE/Variant_TwinStick",
