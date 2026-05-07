@@ -27,6 +27,7 @@ AProjectSECharacter::AProjectSECharacter()
 	// 스프링 암
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->bUsePawnControlRotation = false; // 탑다운 뷰에서는 카메라 고정 양각 유지
 	CameraBoom->SetUsingAbsoluteRotation(true); // 카메라 회전을 월드 기준으로 고정
 	CameraBoom->TargetArmLength = 800.f;
 	CameraBoom->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f)); // 탑다운 앙각
