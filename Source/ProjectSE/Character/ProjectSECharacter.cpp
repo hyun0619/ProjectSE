@@ -122,10 +122,12 @@ void AProjectSECharacter::HandleMove(const FInputActionValue& Value)
 
 void AProjectSECharacter::HandleJump(const FInputActionValue& Value)
 {
+	Jump();
 }
 
 void AProjectSECharacter::HandleStopJumping(const FInputActionValue& Value)
 {
+	StopJumping();
 }
 
 void AProjectSECharacter::HandleAttack(const FInputActionValue& Value)
