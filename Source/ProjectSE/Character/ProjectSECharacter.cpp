@@ -7,7 +7,6 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
-#include "Character/SEWallRunComponent.h"
 
 
 AProjectSECharacter::AProjectSECharacter()
@@ -37,10 +36,7 @@ AProjectSECharacter::AProjectSECharacter()
 	TopDownCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
 	TopDownCameraComponent->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	TopDownCameraComponent->bUsePawnControlRotation = false;
-
-	// 벽 타기 컴포넌트
-	WallRunComp = CreateDefaultSubobject<USEWallRunComponent>(TEXT("WallRunComponent"));
-
+	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
 }
@@ -126,20 +122,10 @@ void AProjectSECharacter::HandleMove(const FInputActionValue& Value)
 
 void AProjectSECharacter::HandleJump(const FInputActionValue& Value)
 {
-	// 벽 타기 중 -> 벽 점프 우선 실행
-	if (WallRunComp && WallRunComp->IsWallRunning())
-	{
-		WallRunComp->OnJumpInput();
-	}
-	else
-	{
-		Jump();
-	}
 }
 
 void AProjectSECharacter::HandleStopJumping(const FInputActionValue& Value)
 {
-	StopJumping();
 }
 
 void AProjectSECharacter::HandleAttack(const FInputActionValue& Value)

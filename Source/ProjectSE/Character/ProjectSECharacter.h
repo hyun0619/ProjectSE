@@ -6,11 +6,9 @@
 
 class UInputMappingContext;
 class UInputAction;
-class USEWallRunComponent;
 struct FInputActionValue;
 /**
  *  WASD 이동 + 스페이스 점프 + 탑다운 카메라 사용하는 기본 캐릭터
- *  WallRunComponent로 벽 타기, 벽 점프 지원
  */
 UCLASS(abstract)
 class AProjectSECharacter : public ACharacter
@@ -30,10 +28,6 @@ private:
 	class USpringArmComponent* CameraBoom;
 
 public:
-	/** 벽타기 컴포넌트 - TickComp에서 매 프레임 좌우 LineTrace로 벽을 감지 -> 조건 만족 시 자동 벽타기 */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
-	TObjectPtr<USEWallRunComponent> WallRunComp;
-	
 	// --------------------------------------------------------------
 	// Enhanced Input 에셋 - 에디터 BP에서 할당
 	// --------------------------------------------------------------
