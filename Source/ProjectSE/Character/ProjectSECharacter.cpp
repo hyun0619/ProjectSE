@@ -1,136 +1,65 @@
 #include "ProjectSECharacter.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "Engine/World.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
-
+#include "MotionWarpingComponent.h"
+#include "CharacterTrajectoryComponent.h"
 
 AProjectSECharacter::AProjectSECharacter()
 {
-	// 캡슐 크기 설정
+	PrimaryActorTick.bCanEverTick = true;
+
+	// --------------------------------------------------------------
+	// 캡슐
+	// --------------------------------------------------------------
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.f);
 
-	// 컨트롤러 회전을 캐릭터에 직접 적용 x
+	// --------------------------------------------------------------
+	// 회전: 컨트롤러 회전을 캐릭터에 그대로 적용하지 않음 (탑다운)
+	// --------------------------------------------------------------
 	bUseControllerRotationPitch = false;
-	bUseControllerRotationYaw = false;
-	bUseControllerRotationRoll = false;
+	bUseControllerRotationYaw   = false;
+	bUseControllerRotationRoll  = false;
 
-	// 캐릭터 이동 설정
-	GetCharacterMovement()->bOrientRotationToMovement = true; // 이동방향 자동 회전
-	GetCharacterMovement()->RotationRate = FRotator(0.f, 640.f, 0.f);
+	// --------------------------------------------------------------
+	// CharacterMovement 기본값
+	//   GASP는 모션 매칭이 직접 회전을 제어하는 부분이 있어
+	//   bOrientRotationToMovement는 BP(CMC defaults)에서 최종 결정합니다.
+	//   여기서는 합리적 기본값만 둠.
+	// --------------------------------------------------------------
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	Move->bOrientRotationToMovement = true;
+	Move->RotationRate              = FRotator(0.f, 500.f, 0.f);
+	Move->bUseControllerDesiredRotation = false;
 
-	// 스프링 암
+	// --------------------------------------------------------------
+	// 카메라 (탑다운)
+	// --------------------------------------------------------------
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->bUsePawnControlRotation = false; // 탑다운 뷰에서는 카메라 고정 양각 유지
-	CameraBoom->SetUsingAbsoluteRotation(true); // 카메라 회전을 월드 기준으로 고정
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->SetUsingAbsoluteRotation(true);
 	CameraBoom->TargetArmLength = 800.f;
-	CameraBoom->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f)); // 탑다운 앙각
-	CameraBoom->bDoCollisionTest = false; // 카메라가 벽을 통과하지 않도록 할 경우 true로
+	CameraBoom->SetRelativeRotation(FRotator(-50.f, 45.f, 0.f)); // BP_SE와 동일 각도
+	CameraBoom->bDoCollisionTest = false;
 
-	// 탑다운 카메라
 	TopDownCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("TopDownCamera"));
 	TopDownCameraComponent->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	TopDownCameraComponent->bUsePawnControlRotation = false;
-	
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = true;
+
+	// --------------------------------------------------------------
+	// GASP 의존 컴포넌트
+	//   CBP_SandboxCharacter가 이미 이 컴포넌트들을 가지고 있다면
+	//   리페어런트 후 BP의 컴포넌트는 삭제하고 C++의 것을 상속받게 됩니다.
+	// --------------------------------------------------------------
+	MotionWarping = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+
+	Trajectory = CreateDefaultSubobject<UCharacterTrajectoryComponent>(TEXT("Trajectory"));
 }
 
 void AProjectSECharacter::BeginPlay()
 {
 	Super::BeginPlay();
-}
-
-void AProjectSECharacter::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-}
-
-void AProjectSECharacter::NotifyControllerChanged()
-{
-	Super::NotifyControllerChanged();
-
-	// Enhanced Input 서브시스템 매핑 컨택스트 추가
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<
-			UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
-		{
-			Subsystem->ClearAllMappings();
-
-			if (DefaultMappingContext)
-			{
-				Subsystem->AddMappingContext(DefaultMappingContext, 0);
-			}
-		}
-	}
-}
-
-void AProjectSECharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	
-	// Enhanced Input 컴포넌트로 캐스팅
-	UEnhancedInputComponent* EIC = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
-	
-	if (MoveAction) // 이동
-	{
-		EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AProjectSECharacter::HandleMove);
-	}
-	
-	if (JumpAction) // 점프
-	{
-		EIC->BindAction(JumpAction, ETriggerEvent::Started,   this, &AProjectSECharacter::HandleJump);
-		EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &AProjectSECharacter::HandleStopJumping);
-	}
-	
-	if (AttackAction) // 공격 - 추후 구현
-	{
-		EIC->BindAction(AttackAction, ETriggerEvent::Started, this, &AProjectSECharacter::HandleAttack);
-	}
-}
-
-class UCameraComponent* AProjectSECharacter::GetTopDownCameraComponent() const
-{
-	return TopDownCameraComponent;
-}
-
-class USpringArmComponent* AProjectSECharacter::GetCameraBoom() const
-{
-	return CameraBoom;
-}
-
-void AProjectSECharacter::HandleMove(const FInputActionValue& Value)
-{
-	// IA_Move는 Axis2D(Vector2D) 타입 - X = 좌우(A/D), Y = 전후(W/S)
-	const FVector2D Input = Value.Get<FVector2D>();
-	if (Input.IsNearlyZero()) return;
-
-	const float    CameraYaw   = CameraBoom->GetComponentRotation().Yaw;
-	const FRotator YawRotation(0.f, CameraYaw, 0.f);
-	const FVector  ForwardDir  = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	const FVector  RightDir    = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-	AddMovementInput(ForwardDir, Input.Y);  // W = 앞(+Y), S = 뒤(-Y)
-	AddMovementInput(RightDir,   Input.X);  // D = 우(+X), A = 좌(-X)
-}
-
-void AProjectSECharacter::HandleJump(const FInputActionValue& Value)
-{
-	Jump();
-}
-
-void AProjectSECharacter::HandleStopJumping(const FInputActionValue& Value)
-{
-	StopJumping();
-}
-
-void AProjectSECharacter::HandleAttack(const FInputActionValue& Value)
-{
-	// TODO : 공격 or 상호작용 로직 추가
 }
