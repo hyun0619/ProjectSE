@@ -1,78 +1,52 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Templates/SubclassOf.h"
 #include "GameFramework/PlayerController.h"
 #include "ProjectSEPlayerController.generated.h"
 
-class UNiagaraSystem;
 class UInputMappingContext;
 class UInputAction;
+struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
 /**
- *  Player controller for a top-down perspective game.
- *  Implements point and click based controls
+ *  Top-down player controller with aim-on-hold orientation.
+ *  When the aim action is held, the character faces the mouse cursor,
+ *  enabling strafing movement (forward/back/sideways relative to cursor direction).
  */
 UCLASS(abstract)
 class AProjectSEPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 
-protected:
-
-	/** Time Threshold to know if it was a short press */
-	UPROPERTY(EditAnywhere, Category="Input")
-	float ShortPressThreshold;
-
-	/** FX Class that we will spawn when clicking */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UNiagaraSystem* FXCursor;
-
-	/** MappingContext */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputMappingContext* DefaultMappingContext;
-	
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* SetDestinationClickAction;
-
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* SetDestinationTouchAction;
-
-	/** True if the controlled character should navigate to the mouse cursor. */
-	uint32 bMoveToMouseCursor : 1;
-
-	/** Set to true if we're using touch input */
-	uint32 bIsTouch : 1;
-
-	/** Saved location of the character movement destination */
-	FVector CachedDestination;
-
-	/** Time that the click input has been pressed */
-	float FollowTime = 0.0f;
-
 public:
-
-	/** Constructor */
 	AProjectSEPlayerController();
 
 protected:
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	UInputMappingContext* DefaultMappingContext;
 
-	/** Initialize input bindings */
+	UPROPERTY(EditDefaultsOnly, Category = "Input")
+	UInputAction* StrafeHoldAction;
+
+	/** Rotation speed toward cursor (deg/sec). 0 = instant. */
+	UPROPERTY(EditDefaultsOnly, Category = "Aim", meta = (ClampMin = "0.0"))
+	float AimRotationInterpSpeed = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Aim")
+	TEnumAsByte<ECollisionChannel> CursorTraceChannel = ECC_Visibility;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Aim")
+	bool bIsAiming = false;
+
 	virtual void SetupInputComponent() override;
-	
-	/** Input handlers */
-	void OnInputStarted();
-	void OnSetDestinationTriggered();
-	void OnSetDestinationReleased();
-	void OnTouchTriggered();
-	void OnTouchReleased();
+	virtual void BeginPlay() override;
+	virtual void PlayerTick(float DeltaTime) override;
 
+	void OnStrafeHoldStarted(const FInputActionValue& Value);
+	void OnStrafeHoldCompleted(const FInputActionValue& Value);
+
+	/** Rotate the controlled pawn (not the controller) to face the cursor */
+	void UpdatePawnAimRotation(float DeltaTime);
 };
-
-
