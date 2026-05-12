@@ -49,6 +49,10 @@
 		{
 			"Name": "AnimationLocomotionLibrary",
 			"Enabled": true
+		},
+		{
+			"Name": "LevelDesignVisualizer",
+			"Enabled": true
 		}
 	]
 }
