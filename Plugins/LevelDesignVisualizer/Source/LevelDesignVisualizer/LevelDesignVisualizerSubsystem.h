@@ -64,6 +64,16 @@ struct FLDVizTagState
 	TArray<FLDVizLabel> Labels;
 };
 
+/** 사용자가 명시적으로 OFF 한 액터들 (Config 별로 보관). TMap 값에 TArray 를 직접 못 두니 래핑. */
+USTRUCT()
+struct FLDVizActorSet
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<TWeakObjectPtr<AActor>> Actors;
+};
+
 struct FLDVizCameraInterp
 {
 	FEditorViewportClient* Viewport = nullptr;
@@ -74,6 +84,7 @@ struct FLDVizCameraInterp
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FLDVizSelectionChanged, AActor*, NewlySelectedActor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FLDVizHighlightChanged);
 
 UCLASS()
 class LEVELDESIGNVISUALIZER_API ULevelDesignVisualizerSubsystem
@@ -91,6 +102,7 @@ public:
 	virtual bool IsTickable() const override;
 	virtual ETickableTickType GetTickableTickType() const override { return ETickableTickType::Conditional; }
 
+	// === Per-Config ===
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	int32 HighlightActors(ULevelDesignTagConfig* Config);
 
@@ -100,17 +112,56 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	bool ToggleHighlight(ULevelDesignTagConfig* Config);
 
-	/**
-	 * 새 API: 현재 상태 유지하며 새로고침.
-	 *   - 활성: Clear → ReApply (새 액터 반영)
-	 *   - 비활성: no-op
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	void RefreshHighlight(ULevelDesignTagConfig* Config);
 
 	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
 	bool IsActive(ULevelDesignTagConfig* Config) const;
 
+	// === Per-Actor ===
+
+	/** 해당 액터가 지금 시각화 적용중인지 (실제 렌더링 상태). */
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	bool IsActorHighlighted(AActor* Actor, ULevelDesignTagConfig* Config) const;
+
+	/**
+	 * 사용자가 이 액터를 시각화에 "포함하길 원하는지" (체크박스 상태).
+	 * 기본값 true. 사용자가 OFF 한 액터만 false.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	bool IsActorVisualizationEnabled(AActor* Actor, ULevelDesignTagConfig* Config) const;
+
+	/**
+	 * 사용자 의도 저장 + 즉시 적용.
+	 *   bEnabled=true:  Disabled 목록에서 제거. Config 활성이면 즉시 ON.
+	 *   bEnabled=false: Disabled 목록에 추가.  Config 활성이면 즉시 OFF.
+	 * Config 비활성이면 의도만 저장하고 시각적 변경 없음.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void SetActorHighlighted(AActor* Actor, ULevelDesignTagConfig* Config, bool bEnabled);
+
+	// === Global ===
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	bool IsAnyConfigActive() const;
+
+	/**
+	 * 선택된 Config 의 모든 액터를 강제로 ON/OFF.
+	 * 사용자가 체크박스로 꺼둔 액터(DisabledActorsByTag[Config]) 기록까지 초기화 →
+	 * 다음 ON 때 그 Config 의 모든 액터가 강제로 ON 상태로 들어옴.
+	 * Toggle 기준: 그 Config 가 현재 활성이면 OFF, 아니면 ON.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void ToggleAllHighlights(ULevelDesignTagConfig* Config);
+
+	/**
+	 * 모든 Config 의 모든 액터를 강제로 ON/OFF.
+	 * 모든 DisabledActorsByTag 기록 초기화.
+	 * Toggle 기준: 아무 Config 라도 활성이면 전체 OFF, 모두 비활성이면 전체 ON.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void ForceToggleAllHighlights();
+
+	// === 기타 ===
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	TArray<AActor*> FindActors(ULevelDesignTagConfig* Config) const;
 
@@ -150,9 +201,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Level Design|Visualizer")
 	FLDVizSelectionChanged OnSelectionChanged;
 
+	UPROPERTY(BlueprintAssignable, Category = "Level Design|Visualizer")
+	FLDVizHighlightChanged OnHighlightChanged;
+
 private:
 	UPROPERTY()
 	TMap<FName, FLDVizTagState> ActiveStates;
+
+	/** 사용자가 명시적으로 OFF 한 액터들. ClearAll 에서는 비우지 않음 — 위젯 닫았다 다시 켜도 유지. */
+	UPROPERTY()
+	TMap<FName, FLDVizActorSet> DisabledActorsByTag;
 
 	UPROPERTY()
 	bool bBillboardEnabled = true;
@@ -180,6 +238,7 @@ private:
 	void ApplyToActor(AActor* Actor, const ULevelDesignTagConfig* Config, FLDVizTagState& OutState);
 	void RestoreSnapshot(const FLDVizComponentSnapshot& Snap);
 	void RemoveTextRendersFromActor(AActor* Actor, FName VizComponentTag);
+	void RemoveActorFromState(AActor* Actor, FLDVizTagState& State, FName ActorTag);
 
 	void ApplySizeToAllLabels();
 	bool TryGetEditorCameraLocation(FVector& OutLocation) const;
@@ -187,6 +246,8 @@ private:
 
 	void StartCameraInterp(FEditorViewportClient* VC, const FVector& EndLoc, float Duration);
 	void TickCameraInterps(float DeltaTime);
+
+	void BroadcastHighlightChanged();
 
 	UWorld* GetEditorWorld() const;
 	static FName MakeVizComponentTag(FName ActorTag);
