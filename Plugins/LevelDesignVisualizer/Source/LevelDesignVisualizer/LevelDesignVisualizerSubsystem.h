@@ -2,15 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "EditorSubsystem.h"
+#include "TickableEditorObject.h"
+#include "LevelDesignTagConfig.h"
 #include "LevelDesignVisualizerSubsystem.generated.h"
 
 class AActor;
 class UMaterialInterface;
 class UMeshComponent;
-class ULevelDesignTagConfig;
+class UTextRenderComponent;
+class FEditorViewportClient;
 class FObjectPreSaveContext;
 
-/** 한 메시 컴포넌트의 원본 Overlay 머티리얼 스냅샷. 토글 OFF 시 복원에 사용. */
 USTRUCT()
 struct FLDVizComponentSnapshot
 {
@@ -21,105 +23,171 @@ struct FLDVizComponentSnapshot
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> OriginalOverlay = nullptr;
+
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInterface>> OriginalSlotMaterials;
+
+	UPROPERTY()
+	ELDVizHighlightMode AppliedMode = ELDVizHighlightMode::Overlay;
 };
 
-/** 태그 한 개의 활성 상태(= 영향을 받은 컴포넌트들의 스냅샷 모음) */
+USTRUCT()
+struct FLDVizLabel
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TWeakObjectPtr<UTextRenderComponent> Component;
+
+	UPROPERTY()
+	TWeakObjectPtr<AActor> OwnerActor;
+
+	UPROPERTY()
+	float BaseWorldSize = 50.f;
+
+	UPROPERTY()
+	float HeightOffset = 50.f;
+};
+
 USTRUCT()
 struct FLDVizTagState
 {
 	GENERATED_BODY()
 
 	UPROPERTY()
+	TWeakObjectPtr<ULevelDesignTagConfig> ConfigRef;
+
+	UPROPERTY()
 	TArray<FLDVizComponentSnapshot> Snapshots;
+
+	UPROPERTY()
+	TArray<FLDVizLabel> Labels;
 };
 
-/**
- * 레벨 디자인 시각화 에디터 서브시스템.
- *
- * 책임:
- *  - 액터 태그 기반으로 메시에 Overlay 머티리얼 + TextRender 라벨 부여 (Highlight)
- *  - 토글/검색/포커스 API 제공 (EUW가 호출)
- *  - 레벨 저장 직전, 맵 전환 시 자동 정리해 .umap 오염 방지
- *
- * 비-책임 (위임):
- *  - UI:           EUW (Blueprint)
- *  - 태그별 스타일: ULevelDesignTagConfig (Data Asset)
- */
+struct FLDVizCameraInterp
+{
+	FEditorViewportClient* Viewport = nullptr;
+	FVector StartLoc = FVector::ZeroVector;
+	FVector EndLoc   = FVector::ZeroVector;
+	float Elapsed    = 0.f;
+	float Duration   = 0.25f;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FLDVizSelectionChanged, AActor*, NewlySelectedActor);
+
 UCLASS()
-class LEVELDESIGNVISUALIZER_API ULevelDesignVisualizerSubsystem : public UEditorSubsystem
+class LEVELDESIGNVISUALIZER_API ULevelDesignVisualizerSubsystem
+	: public UEditorSubsystem
+	, public FTickableEditorObject
 {
 	GENERATED_BODY()
 
 public:
-	//~ UEditorSubsystem
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
-	//~ End UEditorSubsystem
 
-	/**
-	 * Config의 ActorTag를 가진 레벨 액터들에 시각화 적용.
-	 * 이미 활성인 경우 자동으로 한 번 정리 후 다시 적용(=Refresh).
-	 * @return 영향을 받은 액터 수
-	 */
+	virtual void Tick(float DeltaTime) override;
+	virtual TStatId GetStatId() const override;
+	virtual bool IsTickable() const override;
+	virtual ETickableTickType GetTickableTickType() const override { return ETickableTickType::Conditional; }
+
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	int32 HighlightActors(ULevelDesignTagConfig* Config);
 
-	/**
-	 * Config의 시각화 해제. 원본 Overlay 복원, 우리가 추가한 TextRender 제거.
-	 * @return 정리된 액터 수
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	int32 ClearHighlight(ULevelDesignTagConfig* Config);
 
-	/**
-	 * 현재 상태에 따라 토글. FlipFlop 구현용.
-	 * @return 토글 후 ON 상태면 true
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	bool ToggleHighlight(ULevelDesignTagConfig* Config);
 
-	/** 해당 Config가 현재 시각화 ON 상태인지 */
+	/**
+	 * 새 API: 현재 상태 유지하며 새로고침.
+	 *   - 활성: Clear → ReApply (새 액터 반영)
+	 *   - 비활성: no-op
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void RefreshHighlight(ULevelDesignTagConfig* Config);
+
 	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
 	bool IsActive(ULevelDesignTagConfig* Config) const;
 
-	/**
-	 * Config의 ActorTag를 가진 현재 레벨 액터 목록.
-	 * 토글 상태와 무관하게 호출 시점의 레벨에서 새로 검색함(목록 갱신용).
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	TArray<AActor*> FindActors(ULevelDesignTagConfig* Config) const;
 
-	/**
-	 * 프로젝트의 모든 ULevelDesignTagConfig Data Asset 자동 수집.
-	 * EUW의 ComboBox 채우기에 사용. DisplayName 기준 정렬.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	TArray<ULevelDesignTagConfig*> GetAllConfigs() const;
 
-	/** 액터를 선택하고 뷰포트 카메라를 이동/줌인 */
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	void FocusOnActor(AActor* Actor);
 
-	/** 모든 시각화 즉시 해제. 저장 직전 / 맵 전환 시 자동 호출. */
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void ToggleFocusOnActor(AActor* Actor);
+
 	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
 	void ClearAll();
 
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void SetBillboardEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	bool GetBillboardEnabled() const { return bBillboardEnabled; }
+
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	void SetLabelSizeMultiplier(float Multiplier);
+
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	float GetLabelSizeMultiplier() const { return LabelSizeMultiplier; }
+
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	TArray<FName> GetActorExtraTags(AActor* Actor, FName ExcludeTag) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Level Design|Visualizer")
+	FText GetActorExtraTagsLabel(AActor* Actor, FName ExcludeTag) const;
+
+	UFUNCTION(BlueprintPure, Category = "Level Design|Visualizer")
+	AActor* GetCurrentSelectedActor() const;
+
+	UPROPERTY(BlueprintAssignable, Category = "Level Design|Visualizer")
+	FLDVizSelectionChanged OnSelectionChanged;
+
 private:
-	/** ActorTag(FName) → 활성 상태. 키를 태그로 두면 같은 태그 재토글이 깔끔. */
 	UPROPERTY()
 	TMap<FName, FLDVizTagState> ActiveStates;
 
+	UPROPERTY()
+	bool bBillboardEnabled = true;
+
+	UPROPERTY()
+	float LabelSizeMultiplier = 1.f;
+
+	UPROPERTY()
+	TArray<TWeakObjectPtr<ULevelDesignTagConfig>> PendingDuplicateReapply;
+
+	TArray<FLDVizCameraInterp> CameraInterps;
+
 	FDelegateHandle MapOpenedHandle;
 	FDelegateHandle PreSaveWorldHandle;
+	FDelegateHandle SelectionChangedHandle;
+	FDelegateHandle DuplicateBeginHandle;
+	FDelegateHandle DuplicateEndHandle;
 
 	void OnMapOpened(const FString& Filename, bool bAsTemplate);
 	void OnPreSaveWorld(UWorld* World, FObjectPreSaveContext Context);
+	void OnEditorSelectionChanged(UObject* NewSelection);
+	void OnDuplicateActorsBegin();
+	void OnDuplicateActorsEnd();
 
 	void ApplyToActor(AActor* Actor, const ULevelDesignTagConfig* Config, FLDVizTagState& OutState);
+	void RestoreSnapshot(const FLDVizComponentSnapshot& Snap);
 	void RemoveTextRendersFromActor(AActor* Actor, FName VizComponentTag);
 
-	UWorld* GetEditorWorld() const;
+	void ApplySizeToAllLabels();
+	bool TryGetEditorCameraLocation(FVector& OutLocation) const;
+	bool ComputeMeshBoundsForActor(AActor* Actor, FVector& OutOrigin, FVector& OutExtent) const;
 
-	/** "LDViz_<Tag>" 형태의 ComponentTag 생성. 정리할 TextRender를 식별. */
+	void StartCameraInterp(FEditorViewportClient* VC, const FVector& EndLoc, float Duration);
+	void TickCameraInterps(float DeltaTime);
+
+	UWorld* GetEditorWorld() const;
 	static FName MakeVizComponentTag(FName ActorTag);
 };
