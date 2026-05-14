@@ -52,6 +52,11 @@ public class ProjectSE : ModuleRules
 			"ProjectSE/Variant_TwinStick/UI"
 		});
 
+		PublicIncludePaths.AddRange(new string[]
+		{
+			"ProjectSE",
+		});
+		
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
