@@ -8,12 +8,10 @@ class UInputMappingContext;
 class UInputAction;
 struct FInputActionValue;
 
-DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
-
 /**
- *  Top-down player controller with aim-on-hold orientation.
- *  When the aim action is held, the character faces the mouse cursor,
- *  enabling strafing movement (forward/back/sideways relative to cursor direction).
+ *  탑다운 플레이어 컨트롤러.
+ *  StrafeHold(우클릭) 입력 시 폰의 SEAimComponent에 목표 Yaw를 매 틱 전달.
+ *  실제 회전 적용은 SEAimComponent의 Tick(TG_PostPhysics)에서 수행.
  */
 UCLASS(abstract)
 class AProjectSEPlayerController : public APlayerController
@@ -30,15 +28,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputAction* StrafeHoldAction;
 
-	/** Rotation speed toward cursor (deg/sec). 0 = instant. */
-	UPROPERTY(EditDefaultsOnly, Category = "Aim", meta = (ClampMin = "0.0"))
-	float AimRotationInterpSpeed = 0.f;
-
+	/** 커서 트레이스에 사용할 채널 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aim")
 	TEnumAsByte<ECollisionChannel> CursorTraceChannel = ECC_Visibility;
-
-	UPROPERTY(BlueprintReadOnly, Category = "Aim")
-	bool bIsAiming = false;
 
 	virtual void SetupInputComponent() override;
 	virtual void BeginPlay() override;
@@ -47,6 +39,6 @@ protected:
 	void OnStrafeHoldStarted(const FInputActionValue& Value);
 	void OnStrafeHoldCompleted(const FInputActionValue& Value);
 
-	/** Rotate the controlled pawn (not the controller) to face the cursor */
-	void UpdatePawnAimRotation(float DeltaTime);
+	/** 매 틱 커서 위치를 트레이스해 SEAimComponent에 목표 Yaw 전달 */
+	void UpdatePawnAimRotation();
 };
