@@ -213,7 +213,8 @@ void ULevelDesignVisualizerSubsystem::OnMapOpened(const FString&, bool)
 
 	// 다른 맵 액터의 weak ref 들은 의미 없으니 disabled 도 비움
 	DisabledActorsByTag.Empty();
-
+	SuspendedDisabledByTag.Empty();
+	
 	BroadcastHighlightChanged();
 }
 
@@ -391,16 +392,38 @@ bool ULevelDesignVisualizerSubsystem::IsAnyConfigActive() const
 void ULevelDesignVisualizerSubsystem::ToggleAllHighlights(ULevelDesignTagConfig* Config)
 {
 	if (!Config || Config->ActorTag.IsNone()) return;
+	const FName Tag = Config->ActorTag;
 
-	// 이 Config 의 DisabledActorsByTag 기록 초기화 (체크박스 OFF 의도 모두 해제)
-	DisabledActorsByTag.Remove(Config->ActorTag);
-
-	if (IsActive(Config))
+	if (SuspendedDisabledByTag.Contains(Tag))
 	{
-		ClearHighlight(Config);
+		// === 복원 모드: highlight OFF + 체크박스 상태 원래대로 ===
+		if (IsActive(Config))
+		{
+			ClearHighlight(Config);
+		}
+
+		FLDVizActorSet Restored = SuspendedDisabledByTag.FindAndRemoveChecked(Tag);
+		if (Restored.Actors.Num() > 0)
+		{
+			DisabledActorsByTag.Add(Tag, MoveTemp(Restored));
+		}
 	}
 	else
 	{
+		// === 진입 모드: 현재 체크박스 OFF 기록 백업 + 강제 모두 ON ===
+		FLDVizActorSet ToBackup;
+		if (FLDVizActorSet* Existing = DisabledActorsByTag.Find(Tag))
+		{
+			ToBackup = MoveTemp(*Existing);
+			DisabledActorsByTag.Remove(Tag);
+		}
+		// 빈 set 이라도 추가 → 다음번 클릭에서 "이 태그가 강제 모드 중" 판정 가능
+		SuspendedDisabledByTag.Add(Tag, MoveTemp(ToBackup));
+
+		if (IsActive(Config))
+		{
+			ClearHighlight(Config);
+		}
 		HighlightActors(Config);
 	}
 
@@ -409,16 +432,47 @@ void ULevelDesignVisualizerSubsystem::ToggleAllHighlights(ULevelDesignTagConfig*
 
 void ULevelDesignVisualizerSubsystem::ForceToggleAllHighlights()
 {
-	// 모든 사용자 OFF 기록 초기화
-	DisabledActorsByTag.Empty();
+	// "강제 모드 중"인지: 백업 슬롯에 항목이 하나라도 있으면 모드 진행 중으로 간주
+	const bool bInForceMode = SuspendedDisabledByTag.Num() > 0;
 
-	if (IsAnyConfigActive())
+	if (bInForceMode)
 	{
-		ClearAll();
+		// === 복원 모드: 모두 OFF + 모든 백업 복원 ===
+		if (IsAnyConfigActive())
+		{
+			ClearAll();
+		}
+
+		for (auto& Pair : SuspendedDisabledByTag)
+		{
+			if (Pair.Value.Actors.Num() > 0)
+			{
+				DisabledActorsByTag.Add(Pair.Key, MoveTemp(Pair.Value));
+			}
+		}
+		SuspendedDisabledByTag.Empty();
 	}
 	else
 	{
+		// === 진입 모드: 현재 모든 DisabledActorsByTag 백업 + 모든 Config ON ===
+		SuspendedDisabledByTag = MoveTemp(DisabledActorsByTag);
+		DisabledActorsByTag.Empty();
+
+		// "ForceAll 모드 중" 마커가 필요하니, 백업이 비어있던 태그들도 빈 set 으로 표시.
+		// (사용자가 아무도 체크박스 OFF 안 했을 때를 위한 처리)
 		const TArray<ULevelDesignTagConfig*> AllConfigs = GetAllConfigs();
+		for (const ULevelDesignTagConfig* Cfg : AllConfigs)
+		{
+			if (Cfg && !Cfg->ActorTag.IsNone() && !SuspendedDisabledByTag.Contains(Cfg->ActorTag))
+			{
+				SuspendedDisabledByTag.Add(Cfg->ActorTag, FLDVizActorSet{});
+			}
+		}
+
+		if (IsAnyConfigActive())
+		{
+			ClearAll();
+		}
 		for (ULevelDesignTagConfig* Cfg : AllConfigs)
 		{
 			HighlightActors(Cfg);

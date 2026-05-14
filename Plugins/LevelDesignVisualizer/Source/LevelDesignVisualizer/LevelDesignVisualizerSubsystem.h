@@ -212,6 +212,17 @@ private:
 	UPROPERTY()
 	TMap<FName, FLDVizActorSet> DisabledActorsByTag;
 
+	/**
+	 * All/Force All 버튼이 일시적으로 비워둔 DisabledActorsByTag 기록의 백업.
+	 * 같은 버튼을 다시 누르면 여기서 복원 → 사용자의 체크박스 선택이 보존됨.
+	 *
+	 * 모드 판정:
+	 *  - Tag 키 존재    = ToggleAllHighlights(Config) 로 그 태그가 "강제 ON" 모드 진행 중
+	 *  - 맵에 항목 존재 = ForceToggleAllHighlights 가 "강제 ON" 모드 진행 중
+	 */
+	UPROPERTY()
+	TMap<FName, FLDVizActorSet> SuspendedDisabledByTag;
+	
 	UPROPERTY()
 	bool bBillboardEnabled = true;
 
