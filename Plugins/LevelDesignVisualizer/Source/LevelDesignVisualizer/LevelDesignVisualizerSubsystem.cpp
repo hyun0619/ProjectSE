@@ -264,19 +264,26 @@ int32 ULevelDesignVisualizerSubsystem::ClearHighlight(ULevelDesignTagConfig* Con
 	if (!State) return 0;
 
 	TSet<AActor*> AffectedActors;
+	TSet<UMeshComponent*> AffectedMeshes;          // ← 추가
 	for (const FLDVizComponentSnapshot& Snap : State->Snapshots)
 	{
 		RestoreSnapshot(Snap);
 		if (UMeshComponent* Mesh = Snap.Component.Get())
 		{
 			if (AActor* Owner = Mesh->GetOwner()) AffectedActors.Add(Owner);
+			AffectedMeshes.Add(Mesh);              // ← 추가
 		}
 	}
 	const FName CompTag = MakeVizComponentTag(Config->ActorTag);
 	for (AActor* Actor : AffectedActors) RemoveTextRendersFromActor(Actor, CompTag);
 
 	const int32 Count = AffectedActors.Num();
-	ActiveStates.Remove(Config->ActorTag);
+	const FName MyTag = Config->ActorTag;
+	ActiveStates.Remove(MyTag);
+
+	// === 추가: 살아있는 다른 Config 의 HiMat 을 다시 적용 ===
+	ReapplyActiveConfigsToMeshes(AffectedMeshes, MyTag);
+
 	BroadcastHighlightChanged();
 	return Count;
 }
@@ -728,16 +735,47 @@ void ULevelDesignVisualizerSubsystem::ApplyToActor(
 		Snap.Component   = Mesh;
 		Snap.AppliedMode = Config->HighlightMode;
 
+		// === 다른 활성 Config 가 이 메쉬에 대한 진짜 원본을 갖고 있는지 먼저 확인 ===
+		bool bInheritedOriginal = false;
+		for (const auto& Pair : ActiveStates)
+		{
+			for (const FLDVizComponentSnapshot& Ex : Pair.Value.Snapshots)
+			{
+				if (Ex.Component.Get() == Mesh)
+				{
+					Snap.OriginalSlotMaterials = Ex.OriginalSlotMaterials;
+					Snap.OriginalOverlay       = Ex.OriginalOverlay;
+					bInheritedOriginal = true;
+					break;
+				}
+			}
+			if (bInheritedOriginal) break;
+		}
+
+		// === 처음 적용되는 메쉬일 때만 현재 머티리얼을 원본으로 채집 ===
+		if (!bInheritedOriginal)
+		{
+			if (Config->HighlightMode == ELDVizHighlightMode::SlotReplace)
+			{
+				const int32 NumSlots = Mesh->GetNumMaterials();
+				Snap.OriginalSlotMaterials.Reserve(NumSlots);
+				for (int32 i = 0; i < NumSlots; ++i)
+					Snap.OriginalSlotMaterials.Add(Mesh->GetMaterial(i));
+			}
+			else
+			{
+				Snap.OriginalOverlay = Mesh->GetOverlayMaterial();
+			}
+		}
+
+		// 하이라이트 적용 (기존 그대로)
 		if (Config->HighlightMode == ELDVizHighlightMode::SlotReplace)
 		{
 			const int32 NumSlots = Mesh->GetNumMaterials();
-			Snap.OriginalSlotMaterials.Reserve(NumSlots);
-			for (int32 i = 0; i < NumSlots; ++i) Snap.OriginalSlotMaterials.Add(Mesh->GetMaterial(i));
 			for (int32 i = 0; i < NumSlots; ++i) Mesh->SetMaterial(i, HiMat);
 		}
 		else
 		{
-			Snap.OriginalOverlay = Mesh->GetOverlayMaterial();
 			Mesh->SetOverlayMaterial(HiMat);
 		}
 		OutState.Snapshots.Add(Snap);
@@ -808,12 +846,18 @@ void ULevelDesignVisualizerSubsystem::RemoveActorFromState(
 {
 	if (!IsValid(Actor)) return;
 
+	TSet<UMeshComponent*> AffectedMeshes;          // ← 추가
+
 	for (int32 i = State.Snapshots.Num() - 1; i >= 0; --i)
 	{
 		UMeshComponent* Mesh = State.Snapshots[i].Component.Get();
 		if (!Mesh || Mesh->GetOwner() == Actor)
 		{
-			if (Mesh) RestoreSnapshot(State.Snapshots[i]);
+			if (Mesh)
+			{
+				RestoreSnapshot(State.Snapshots[i]);
+				AffectedMeshes.Add(Mesh);          // ← 추가
+			}
 			State.Snapshots.RemoveAt(i);
 		}
 	}
@@ -822,6 +866,9 @@ void ULevelDesignVisualizerSubsystem::RemoveActorFromState(
 		if (State.Labels[i].OwnerActor.Get() == Actor) State.Labels.RemoveAt(i);
 	}
 	RemoveTextRendersFromActor(Actor, MakeVizComponentTag(ActorTag));
+
+	// === 추가 ===
+	ReapplyActiveConfigsToMeshes(AffectedMeshes, ActorTag);
 }
 
 void ULevelDesignVisualizerSubsystem::RemoveTextRendersFromActor(AActor* Actor, FName VizComponentTag)
@@ -844,4 +891,35 @@ FName ULevelDesignVisualizerSubsystem::MakeVizComponentTag(FName ActorTag)
 {
 	if (ActorTag.IsNone()) return NAME_None;
 	return FName(*FString::Printf(TEXT("LDViz_%s"), *ActorTag.ToString()));
+}
+
+void ULevelDesignVisualizerSubsystem::ReapplyActiveConfigsToMeshes(
+	const TSet<UMeshComponent*>& Meshes, FName SkipTag)
+{
+	if (Meshes.Num() == 0) return;
+
+	for (auto& Pair : ActiveStates)
+	{
+		if (Pair.Key == SkipTag) continue;
+		ULevelDesignTagConfig* Cfg = Pair.Value.ConfigRef.Get();
+		if (!Cfg) continue;
+		UMaterialInterface* Hi = Cfg->OverlayMaterial.LoadSynchronous();
+		if (!Hi) continue;
+
+		for (const FLDVizComponentSnapshot& Snap : Pair.Value.Snapshots)
+		{
+			UMeshComponent* Mesh = Snap.Component.Get();
+			if (!Mesh || !Meshes.Contains(Mesh)) continue;
+
+			if (Snap.AppliedMode == ELDVizHighlightMode::SlotReplace)
+			{
+				const int32 N = Mesh->GetNumMaterials();
+				for (int32 i = 0; i < N; ++i) Mesh->SetMaterial(i, Hi);
+			}
+			else
+			{
+				Mesh->SetOverlayMaterial(Hi);
+			}
+		}
+	}
 }
