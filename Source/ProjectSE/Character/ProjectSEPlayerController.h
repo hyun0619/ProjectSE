@@ -28,6 +28,15 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputAction* StrafeHoldAction;
 
+	UPROPERTY(EditDefaultsOnly, Category="Input")
+	UInputMappingContext* WallRunMappingContext;
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	void EnterWallRunInputMode();
+
+	UFUNCTION(BlueprintCallable, Category="Input")
+	void ExitWallRunInputMode();
+	
 	/** 커서 트레이스에 사용할 채널 */
 	UPROPERTY(EditDefaultsOnly, Category = "Aim")
 	TEnumAsByte<ECollisionChannel> CursorTraceChannel = ECC_Visibility;
