@@ -34,8 +34,7 @@ void AProjectSEPlayerController::EnterWallRunInputMode()
 {
 	auto* Sub = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
 	if (!Sub) return;
-
-	// 진행 중이던 조준도 풀어버린다
+	
 	if (ACharacter* Char = Cast<ACharacter>(GetPawn()))
 	{
 		if (auto* Aim = Char->FindComponentByClass<USEAimComponent>())
@@ -102,7 +101,7 @@ void AProjectSEPlayerController::OnStrafeHoldStarted(const FInputActionValue&)
 		Aim->SetAiming(true);
 	}
 
-	// 조준 중에는 CMC의 회전 제어를 끄고 SEAimComponent가 직접 회전한다.
+	// 조준 중에는 CMC의 회전 제어를 끄고 SEAimComponent가 직접 회전
 	if (UCharacterMovementComponent* Move = Char->GetCharacterMovement())
 	{
 		Move->bOrientRotationToMovement     = false;
@@ -124,7 +123,7 @@ void AProjectSEPlayerController::OnStrafeHoldCompleted(const FInputActionValue&)
 		Aim->ClearAimYawTarget();
 	}
 
-	// 일반 이동 복귀: 이동 방향으로 캐릭터가 도는 GASP 기본 모드
+	// 일반 이동 복귀 - 이동 방향으로 캐릭터가 도는 GASP 기본 모드
 	if (UCharacterMovementComponent* Move = Char->GetCharacterMovement())
 	{
 		Move->bOrientRotationToMovement     = true;
@@ -171,7 +170,7 @@ void AProjectSEPlayerController::UpdatePawnAimRotation()
 	const FRotator LookAt = UKismetMathLibrary::FindLookAtRotation(PawnLocation, CursorLocation);
 	const FRotator TargetRot(0.f, LookAt.Yaw, 0.f);
 
-	// GASP ABP가 읽을 ControlRotation 갱신 (원본과 동일)
+	// GASP ABP가 읽을 ControlRotation 갱신
 	SetControlRotation(TargetRot);
 
 	// SEAimComponent에도 전달 (디버그/상태용)

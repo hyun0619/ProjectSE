@@ -9,9 +9,7 @@ class UInputAction;
 struct FInputActionValue;
 
 /**
- *  탑다운 플레이어 컨트롤러.
- *  StrafeHold(우클릭) 입력 시 폰의 SEAimComponent에 목표 Yaw를 매 틱 전달.
- *  실제 회전 적용은 SEAimComponent의 Tick(TG_PostPhysics)에서 수행.
+ *  탑다운 플레이어 컨트롤러
  */
 UCLASS(abstract)
 class AProjectSEPlayerController : public APlayerController
