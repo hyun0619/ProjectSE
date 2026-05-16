@@ -139,5 +139,11 @@ void AProjectSEPlayerController::UpdatePawnAimRotation()
 	}
 
 	const FRotator LookAt = UKismetMathLibrary::FindLookAtRotation(PawnLocation, CursorLocation);
+	const FRotator TargetRot(0.f, LookAt.Yaw, 0.f);
+
+	// GASP ABP가 읽을 ControlRotation 갱신 (원본과 동일)
+	SetControlRotation(TargetRot);
+
+	// SEAimComponent에도 전달 (디버그/상태용)
 	Aim->SetAimYawTarget(LookAt.Yaw);
 }
