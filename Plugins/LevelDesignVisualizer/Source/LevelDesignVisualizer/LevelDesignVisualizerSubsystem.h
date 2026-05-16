@@ -262,4 +262,6 @@ private:
 
 	UWorld* GetEditorWorld() const;
 	static FName MakeVizComponentTag(FName ActorTag);
+	
+	void ReapplyActiveConfigsToMeshes(const TSet<UMeshComponent*>& Meshes, FName SkipTag);
 };

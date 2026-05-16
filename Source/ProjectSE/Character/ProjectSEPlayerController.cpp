@@ -30,6 +30,36 @@ void AProjectSEPlayerController::BeginPlay()
 	}
 }
 
+void AProjectSEPlayerController::EnterWallRunInputMode()
+{
+	auto* Sub = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+	if (!Sub) return;
+
+	// 진행 중이던 조준도 풀어버린다
+	if (ACharacter* Char = Cast<ACharacter>(GetPawn()))
+	{
+		if (auto* Aim = Char->FindComponentByClass<USEAimComponent>())
+		{
+			Aim->SetAiming(false);
+			Aim->ClearAimYawTarget();
+		}
+	}
+
+	if (DefaultMappingContext)  Sub->RemoveMappingContext(DefaultMappingContext);
+	if (WallRunMappingContext)  Sub->AddMappingContext(WallRunMappingContext, 0);
+
+}
+
+void AProjectSEPlayerController::ExitWallRunInputMode()
+{
+	auto* Sub = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer());
+	if (!Sub) return;
+
+	if (WallRunMappingContext)  Sub->RemoveMappingContext(WallRunMappingContext);
+	if (DefaultMappingContext)  Sub->AddMappingContext(DefaultMappingContext, 0);
+
+}
+
 void AProjectSEPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
