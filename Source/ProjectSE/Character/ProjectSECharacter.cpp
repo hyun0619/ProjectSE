@@ -2,6 +2,7 @@
 
 #include "Camera/CameraComponent.h"
 #include "Character/Component/SEAimComponent.h"
+#include "Character/Component/SEPistolComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -46,6 +47,9 @@ AProjectSECharacter::AProjectSECharacter()
 
 	// 게임플레이 컴포넌트
 	AimComponent = CreateDefaultSubobject<USEAimComponent>(TEXT("AimComponent"));
+	// 1. PistolComponent를 실제로 생성하고 메모리에 할당합니다.
+	// 괄호 안의 TEXT("PistolComponent")는 에디터 내부에서 관리되는 컴포넌트의 고유 이름입니다.
+	PistolComponent = CreateDefaultSubobject<USEPistolComponent>(TEXT("PistolComponent"));
 }
 
 void AProjectSECharacter::BeginPlay()
