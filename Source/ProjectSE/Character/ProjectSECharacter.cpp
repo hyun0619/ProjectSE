@@ -4,6 +4,8 @@
 #include "Character/Component/SEAimComponent.h"
 #include "Character/Component/SEPistolComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/InheritableComponentHandler.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "MotionWarpingComponent.h"
@@ -48,8 +50,48 @@ AProjectSECharacter::AProjectSECharacter()
 	// 게임플레이 컴포넌트
 	AimComponent = CreateDefaultSubobject<USEAimComponent>(TEXT("AimComponent"));
 	// 1. PistolComponent를 실제로 생성하고 메모리에 할당합니다.
-	// 괄호 안의 TEXT("PistolComponent")는 에디터 내부에서 관리되는 컴포넌트의 고유 이름입니다.
-	PistolComponent = CreateDefaultSubobject<USEPistolComponent>(TEXT("PistolComponent"));
+	// 피스톨 컴포넌트 인스턴스 생성 및 할당 (이름은 고유해야 함)
+    PistolComponent = CreateDefaultSubobject<USEPistolComponent>(TEXT("PistolComponent"));
+
+#if WITH_EDITOR
+	// TEMP DIAGNOSTIC (remove once the stale component record is cleared).
+	if (UBlueprintGeneratedClass* ProbeBPGC = Cast<UBlueprintGeneratedClass>(GetClass()))
+	{
+		if (ProbeBPGC->GetName().Contains(TEXT("Sandbox")) || !PistolComponent)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[PistolProbe] class=%s pistol=%s aim=%s overrides=%d"),
+				*ProbeBPGC->GetName(),
+				PistolComponent ? TEXT("VALID") : TEXT("NULL"),
+				AimComponent ? TEXT("VALID") : TEXT("NULL"),
+				ProbeBPGC->ComponentClassOverrides.Num());
+
+			for (const FBPComponentClassOverride& ProbeOvr : ProbeBPGC->ComponentClassOverrides)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[PistolProbe]   override '%s' -> %s"),
+					*ProbeOvr.ComponentName.ToString(),
+					ProbeOvr.ComponentClass ? *ProbeOvr.ComponentClass->GetName() : TEXT("NULL"));
+			}
+
+			if (UInheritableComponentHandler* ProbeICH = ProbeBPGC->GetInheritableComponentHandler(false))
+			{
+				int32 ProbeNum = 0;
+				for (auto ProbeIt = ProbeICH->CreateRecordIterator(); ProbeIt; ++ProbeIt)
+				{
+					++ProbeNum;
+					UE_LOG(LogTemp, Warning, TEXT("[PistolProbe]   ICH[%d] scsVar=%s class=%s tmpl=%s"), ProbeNum,
+						*ProbeIt->ComponentKey.GetSCSVariableName().ToString(),
+						ProbeIt->ComponentClass ? *ProbeIt->ComponentClass->GetName() : TEXT("NULL"),
+						ProbeIt->ComponentTemplate ? *ProbeIt->ComponentTemplate->GetName() : TEXT("NULL"));
+				}
+				UE_LOG(LogTemp, Warning, TEXT("[PistolProbe] ICH records=%d"), ProbeNum);
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[PistolProbe] ICH=null"));
+			}
+		}
+	}
+#endif
 }
 
 void AProjectSECharacter::BeginPlay()
