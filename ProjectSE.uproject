@@ -53,6 +53,14 @@
 		{
 			"Name": "LevelDesignVisualizer",
 			"Enabled": true
+		},
+		{
+			"Name": "Aura",
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Mac"
+			]
 		}
 	]
 }
